@@ -116,7 +116,6 @@ cctv_buttons = [
     CamButton("CAM 5", map_x + 265, map_y + 240),  # บนถนน (ROAD)
 ]
 # --- Load Assets ---
-# (ใช้ try-except หรือตรวจสอบ path ให้ดีนะครับ)
 try:
     tileset = pygame.image.load("assets/Tilesheets/roguelikeIndoor_transparent.png").convert_alpha()
     # โหลดรูปหน้าต่างและ jumpscare
@@ -125,8 +124,11 @@ try:
     windowg70 = pygame.transform.scale(pygame.image.load("images/windowg70%.jpg"), (SCREEN_W, SCREEN_H))
     windowg99 = pygame.transform.scale(pygame.image.load("images/windowg99%.jpg"), (SCREEN_W, SCREEN_H))
     ghost_jump = pygame.transform.scale(pygame.image.load("images/gjump.jpg"), (SCREEN_W, SCREEN_H))
-    door = pygame.transform.scale(pygame.image.load("images/door.jpg"), (SCREEN_W, SCREEN_H))
-    doorg = pygame.transform.scale(pygame.image.load("images/doorg.jpg"), (SCREEN_W, SCREEN_H))
+    door1 = pygame.transform.scale(pygame.image.load("images/door.jpg"), (SCREEN_W, SCREEN_H))
+    door1g = pygame.transform.scale(pygame.image.load("images/doorg.jpg"), (SCREEN_W, SCREEN_H))
+    door2 = pygame.transform.scale(pygame.image.load("images/d2.jpg"), (SCREEN_W,SCREEN_H))
+    door2g = pygame.transform.scale(pygame.image.load("images/d2_g.jpg"), (SCREEN_W, SCREEN_H))
+
 except:
     print("Warning: Some assets not found!")
     # สร้าง Surface เปล่ากัน Error สำหรับ Test
@@ -151,96 +153,72 @@ def reset():
     breathing_scream.stop()
     hit_sound.stop()
 
-map_data = [
-    [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
-    [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
-    [-1,-1,13,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,13,-1,-1,-1],
-    [-1,-1,13,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,13,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,-1,-1,-1],
-    [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
-    [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+map_data = [ #0=empty 1=floor 
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 ]
-decor_map = [
-    [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
-    [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
-    [-1,-1,5,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,6,-1,-1,-1],
-    [-1,-1,2,13,13,13,13,13,2,13,13,13,13,13,13,13,13,13,13,13,13,13,3,-1,-1,-1],
-    [-1,-1,2,-1,-1,20,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1],
-    [-1,-1,2,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1],
-    [-1,-1,2,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1],
-    [-1,-1,2,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,5,11,11,11,11,11,6,-1,-1,-1],
-    [-1,-1,2,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,3,-1,-1,-1],
-    [-1,-1,2,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,-1,-1,2,-1,-1,-1,-1,-1,3,-1,-1,-1],
-    [-1,-1,2,-1,-1,-1,-1,-1,7,1,1,1,1,1,1,1,8,-1,-1,-1,-1,-1,3,-1,-1,-1],
-    [-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,21,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1],
-    [-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1],
-    [-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1],
-    [-1,-1,2,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,3,-1,-1,-1],
-    [-1,-1,2,-1,-1,22,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,22,-1,-1,3,-1,-1,-1],
-    [-1,-1,7,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,8,-1,-1,-1],
-    [-1,-1,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,-1,-1,-1],
-    [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
-    [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],
+decor_map = [ #0=empty 1=wall
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,3,0,1,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1,0,0,0],
+    [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+    [0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+    [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+    [0,0,1,0,0,0,0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,1,0,0,0],
+    [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+    [0,0,1,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 ]
-tiles = {
-    0: pygame.transform.scale(get_tile(23, 0), (16*SCALE, 16*SCALE)),
-    1: pygame.transform.scale(get_tile(24, 0), (16*SCALE, 16*SCALE)),
-    2: pygame.transform.scale(get_tile(25, 0), (16*SCALE, 16*SCALE)),
-    4: pygame.transform.scale(get_tile(10, 13), (16*SCALE, 16*SCALE)),
-    5: pygame.transform.scale(get_tile(10, 12), (16*SCALE, 16*SCALE)),
-    -1: pygame.transform.scale(get_tile(-1, -1), (16*SCALE, 16*SCALE)),
-    13: pygame.transform.scale(get_tile(10, 17), (16*SCALE, 16*SCALE)),
-    
-}
-walls = {
-    -1: pygame.transform.scale(get_tile(-1, -1), (16*SCALE, 16*SCALE)),
-    1: pygame.transform.scale(get_tile(9, 16), (16*SCALE, 16*SCALE)),
-    11: pygame.transform.scale(get_tile(3, 13), (16*SCALE, 16*SCALE)),
-    12: pygame.transform.scale(get_tile(10, 17), (16*SCALE, 16*SCALE)),
-    13: pygame.transform.scale(get_tile(10, 17), (16*SCALE, 16*SCALE)),
-    2: pygame.transform.scale(get_tile(10, 13), (16*SCALE, 16*SCALE)),
-    3: pygame.transform.scale(get_tile(11, 13), (16*SCALE, 16*SCALE)),
-    5: pygame.transform.scale(get_tile(10, 12), (16*SCALE, 16*SCALE)),
-    6: pygame.transform.scale(get_tile(11, 12), (16*SCALE, 16*SCALE)),
-    7: pygame.transform.scale(get_tile(8, 16), (16*SCALE, 16*SCALE)),
-    8: pygame.transform.scale(get_tile(10, 16), (16*SCALE, 16*SCALE)),
-    20: pygame.transform.scale(get_tile(14, 14), (16*SCALE, 16*SCALE)),
-    21: pygame.transform.scale(get_tile(19, 14), (16*SCALE, 16*SCALE)),
-    22: pygame.transform.scale(get_tile(20, 17), (16*SCALE, 16*SCALE)),
-}
-tiles = { 1: get_tile(24, 0), 13: get_tile(10, 17) }
+
+tiles = { 1: get_tile(24, 0) }
+
 walls_img = {
-    1: get_tile(9, 16), 2: get_tile(10, 13), 3: get_tile(11, 13),
-    5: get_tile(10, 12), 6: get_tile(11, 12), 11: get_tile(3, 13),
-    12: get_tile(10, 17), 13: get_tile(10, 17), 20: get_tile(14, 14),
-    21: get_tile(19, 14), 22: get_tile(20, 17)
+    1: get_tile(5, 0), 2: get_tile(24, 4), 3: get_tile(24, 4),
+    4: get_tile(24, 4),5: get_tile(24, 4)
 }
 
 # --- Game Variables ---
 player_size = 30
-player_x, player_y = 400, 450
+player_x, player_y = 400, 400
 player_speed = 3
 game_state = "main"
-window_progress = 50
+window_progress = 0
 window_speed = 0.2
+door2_progress = 50
+door2_speed = 0.2
 click_power = 1.5
 jumpscare_timer = 0
 shake_timer = 0
 near_interact = False
 near_window = False
 near_door = False
+near_door2 = False
 near_computer = False
 max_reached_progress = window_progress
 last_pull_time = 0
@@ -261,22 +239,29 @@ breathing_playing = False
 breathing_scream_playing = False
 footstep_playing = False
 ambient_playing = False
+button_rect = pygame.Rect(150, 100, 100, 50)
+button_color = (200, 0, 0)
+text_color = (255, 255, 255)
+font = pygame.font.SysFont("Arial", 24)
 # Pre-calculate Rects
 wall_rects = []
 window_rects = []
 door_rects = []
+door2_rects = []
 computer_rects = []
 for r, row in enumerate(decor_map):
     for c, val in enumerate(row):
         rect = pygame.Rect(c * DISPLAY_TILE, r * DISPLAY_TILE, DISPLAY_TILE, DISPLAY_TILE)
-        if val in [1, 2, 3, 5, 6, 7, 8, 11, 12, 13]:
+        if val in [1]:
             wall_rects.append(rect)
-        if val in [20]:
+        if val in [5]:
             computer_rects.append(rect)
-        if val in [21]:
+        if val in [4]:
             window_rects.append(rect)
-        if val in [22]:
+        if val in [2]:
             door_rects.append(rect)
+        if val in [3]:
+            door2_rects.append(rect)
         
 
 # Custom Events
@@ -291,6 +276,14 @@ while running:
     mouse_pos = pygame.mouse.get_pos()
     spacebar_press = False  # รีเซ็ตทุกเฟรม
 
+    # 1. เพิ่ม Delta Time ตรงนี้เพื่อให้ทุกอย่างอ้างอิงเวลาจริง
+    dt = clock.tick(60) / 1000
+
+    # 2. Global Logic: ทำให้ Window Progress เพิ่มขึ้นตลอดเวลา ไม่ว่าจะอยู่หน้าจอไหน
+    # (ยกเว้นตอน Jumpscare เพื่อไม่ให้ค่ามันรันต่อตอนตาย)
+    if game_state != "jumpscare":
+        window_progress += window_speed * 10 * dt # ปรับตัวคูณเพื่อความเร็วที่เหมาะสม
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -299,7 +292,7 @@ while running:
             if current_time - last_ghost_time < ghost_cooldown:
                 continue
             
-            if game_state in ["window", "door"]:
+            if game_state in ["window", "door", "door2"]:
                 continue
             # ถ้ามีผี active อยู่แล้ว → ไม่ต้อง spawn ซ้ำ
             if ghost_active:
@@ -307,24 +300,9 @@ while running:
 
             move = False
             # =========================
-            # 🎯 CAM 2 → WINDOW LOGIC
-            # =========================
-            if ghost_cctv_pos == "CAM 2":
-                if random.random() < 0.5 and current_time - last_door_attack_time > door_attack_cooldown:
-                    ghost_active = True
-                    ghost_target = "window"
-                    ghost_spawn_time = current_time
-                    last_door_attack_time = current_time
-                    window_opening.play()
-                    print("Ghost attack from CAM 2 -> WINDOW")
-                else:
-                    ghost_cctv_pos = random.choice(["CAM 1", "CAM 4"])
-                    move = True
-
-            # =========================
             # 🚪 CAM 3 → DOOR LOGIC
             # =========================
-            elif ghost_cctv_pos == "CAM 3":
+            if ghost_cctv_pos == "CAM 3":
                 if random.random() < 0.3 and current_time - last_door_attack_time > door_attack_cooldown:
                     ghost_active = True
                     ghost_target = "door"
@@ -341,9 +319,9 @@ while running:
             # =========================
             
             elif ghost_cctv_pos == "CAM 4":
-                if random.random() < 0.3 and current_time - last_door_attack_time > door_attack_cooldown:
+                if random.random() < 0.3 :
                     ghost_active = True
-                    ghost_target = "door"
+                    ghost_target = "door2"
                     ghost_spawn_time = current_time
                     last_door_attack_time = current_time
                     door_knocking.stop()   # 💥 หยุดเสียงเคาะทันที
@@ -371,16 +349,7 @@ while running:
                 if near_window:
                     # ✅ มีผี → เข้าเกม
                     footstep.stop()
-                    if ghost_active and ghost_target == "window":
-                        game_state = "window"
-                        window_progress = 30
-
-                        ghost_active = False
-                        last_ghost_time = current_time
-
-                    # ❌ ไม่มีผี → แค่ดูเฉยๆ
-                    else:
-                        game_state = "window_idle"
+                    game_state = "window"
 
                 elif near_door:
                     # ✅ มีผี → เข้าเกม
@@ -392,10 +361,25 @@ while running:
                         ghost_active = False
                         last_ghost_time = current_time
 
-                    # ❌ ไม่มีผี → แค่ดูเฉยๆ
                     else:
                         game_state = "door_idle"
                         footstep.stop()
+
+                elif near_door2:
+                    # ✅ มีผี → เข้าเกม
+                    footstep.stop()
+                    if ghost_active and ghost_target == "door2":
+                        game_state = "door2"
+                        charge_level = 30
+
+                        ghost_active = False
+                        last_ghost_time = current_time
+
+                    # ❌ ไม่มีผี → แค่ดูเฉยๆ
+                    else:
+                        game_state = "door2_idle"
+                        footstep.stop()
+
                 elif near_computer:
                     game_state = "computer"
                     static_timer = 20
@@ -403,9 +387,10 @@ while running:
                     open_camera_sound.play()
                     ambient.play(-1)
 
-            elif game_state in ["window_idle", "door_idle", "computer"] and event.key == pygame.K_q:
+            elif game_state in ["door2_idle", "door_idle", "computer","window"] and event.key == pygame.K_q:
                 game_state = "main"
                 ambient.stop()
+
         if event.type == pygame.MOUSEBUTTONDOWN and game_state == "computer":
             for btn in cctv_buttons:
                 if btn.rect.collidepoint(event.pos):
@@ -415,17 +400,17 @@ while running:
                     footstep.stop()
     # 2. Update Logic
     
-    if ghost_cctv_pos == "CAM 4" and not ghost_active and game_state != "door":
+    if ghost_cctv_pos == "CAM 4" and not ghost_active and game_state != "door2":
                 if current_time - last_knock_time > 2000:  # ทุก 2 วิ
                     door_knocking.play()
                     last_knock_time = current_time
 
     # --- GHOST TIMER CHECK ---
-    if ghost_active and game_state in ["main", "window_idle", "door_idle","computer"]:
-        if ghost_target == "window":
-            time_limit = 10000  # 10 วิ
-
-        elif ghost_target == "door":
+    if ghost_active and game_state in ["main", "door2_idle", "door_idle","computer"]:
+        if ghost_target == "door":
+            time_limit = 20000  # 20 วิ
+        
+        elif ghost_target == "door2":
             time_limit = 20000  # 20 วิ
 
 
@@ -479,79 +464,28 @@ while running:
         p_rect = pygame.Rect(player_x, player_y, player_size, player_size)
         near_window = any(p_rect.inflate(20, 20).colliderect(i) for i in window_rects)
         near_door = any(p_rect.inflate(20, 20).colliderect(i) for i in door_rects)
+        near_door2 = any(p_rect.inflate(20, 20).colliderect(i) for i in door2_rects)
         near_computer = any(p_rect.inflate(20, 20).colliderect(i) for i in computer_rects)
 
     elif game_state == "window":
-        if not chasing_playing:
-            chasing.play(-1)   # 🔁 loop
-            chasing_playing = True
-    # --- INIT (ใส่ก่อน loop จริงครั้งแรก) ---
-    # if not defined:
-    # max_reached_progress = window_progress
-        shake_timer = 10
-        # 🎧 SOUND CONTROL
-        # ▶️ เข้า minigame ครั้งแรก → เปิด breathing
-        if not breathing_playing and not breathing_scream_playing:
-            breathing.play(-1)
-            breathing_playing = True
+        mouse_pos = pygame.mouse.get_pos()
+        mouse_click = pygame.mouse.get_pressed() # (ซ้าย, กลาง, ขวา)
 
-        # 😱 ถ้าเกิน 80 → เปลี่ยนเป็น scream
-        if window_progress > 70:
-            if not breathing_scream_playing:
-                breathing.stop()
-                breathing_playing = False
-
-                breathing_scream.play(-1)
-                breathing_scream_playing = True
-
-    # 1. อัปเดตค่าที่เคยสูงสุด
-        if window_progress > max_reached_progress:
-            max_reached_progress = window_progress
-
-    # 2. คำนวณความเร็วผี (อิงจาก "จุดที่เคยแย่สุด")
-        base_speed = 0.15
-        max_ghost_speed = 1
-
-    # ยิ่งเคยใกล้ตาย → ผียิ่งแรง
-        target_speed = base_speed + (max_reached_progress * 0.01)
-
-    # ถ้าผู้เล่นดันกลับได้ (progress ปัจจุบัน < จุดพีค)
-        if window_progress < max_reached_progress:
-            target_speed *= 0.5   # ลดความโหดลง 30%
-            click_power += 0.01
-    # clamp ไม่ให้เกินลิมิต
-        current_push_speed = min(max_ghost_speed, target_speed)
-
-    # ผีดัน
-        window_progress += current_push_speed
-
-    # 3. โบนัสฮึดสู้ (เหมือนเดิม แต่ปรับให้นุ่มขึ้น)
-        bonus_power = (window_progress / 100) * 2.0
-
-        if spacebar_press:
-            window_progress -= (click_power + bonus_power)
-
-    # 4. clamp ค่า
-        window_progress = max(0, min(100, window_progress))
-
-    # 5. reset peak ถ้าผู้เล่นเอาอยู่จริง
-        if window_progress < max_reached_progress - 20:
-            max_reached_progress = window_progress
+        # เช็คว่าเมาส์ทับปุ่ม และ คลิกซ้ายค้างอยู่หรือไม่
+        if button_rect.collidepoint(mouse_pos) and mouse_click[0]:
+            # Logic: เพิ่มค่า
+            window_progress -= 1.5
+            # Logic: เปลี่ยนสีปุ่มเมื่อกด
+            button_color = (100, 0, 0)
+        else:
+            # Logic: คืนสีเดิมเมื่อไม่ได้กด
+            button_color = (200, 0, 0)
+        if window_progress < 0: window_progress = 0
 
     # 6. เช็คแพ้/ชนะ
         if window_progress >= 100:
             game_state = "jumpscare"
             jumpscare_timer = 90
-
-        elif window_progress <= 0:
-            game_state = "main"
-            window_progress = 20
-            max_reached_progress = window_progress
-            click_power = 1.5
-            last_ghost_time = current_time   
-            ghost_cctv_pos = random.choice(["CAM 4", "CAM 5","CAM 1"])  
-            last_ghost_time = current_time
-            reset()
     
     elif game_state == "door":
 
@@ -605,6 +539,73 @@ while running:
             game_state = "jumpscare"
             jumpscare_timer = 90
 
+    elif game_state == "door2":
+        if not chasing_playing:
+            chasing.play(-1)   # 🔁 loop
+            chasing_playing = True
+
+        shake_timer = 10
+
+        if not breathing_playing and not breathing_scream_playing:
+            breathing.play(-1)
+            breathing_playing = True
+
+        if door2_progress > 70:
+            if not breathing_scream_playing:
+                breathing.stop()
+                breathing_playing = False
+
+                breathing_scream.play(-1)
+                breathing_scream_playing = True
+
+    # 1. อัปเดตค่าที่เคยสูงสุด
+        if door2_progress > max_reached_progress:
+            max_reached_progress = door2_progress
+
+    # 2. คำนวณความเร็วผี (อิงจาก "จุดที่เคยแย่สุด")
+        base_speed = 0.15
+        max_ghost_speed = 1
+
+    # ยิ่งเคยใกล้ตาย → ผียิ่งแรง
+        target_speed = base_speed + (max_reached_progress * 0.01)
+
+    # ถ้าผู้เล่นดันกลับได้ (progress ปัจจุบัน < จุดพีค)
+        if door2_progress < max_reached_progress:
+            target_speed *= 0.5   # ลดความโหดลง 30%
+            click_power += 0.01
+    # clamp ไม่ให้เกินลิมิต
+        current_push_speed = min(max_ghost_speed, target_speed)
+
+    # ผีดัน
+        door2_progress += current_push_speed
+
+    # 3. โบนัสฮึดสู้ (เหมือนเดิม แต่ปรับให้นุ่มขึ้น)
+        bonus_power = (door2_progress / 100) * 2.0
+
+        if spacebar_press:
+            door2_progress -= (click_power + bonus_power)
+
+    # 4. clamp ค่า
+        door2_progress = max(0, min(100, door2_progress))
+
+    # 5. reset peak ถ้าผู้เล่นเอาอยู่จริง
+        if door2_progress < max_reached_progress - 20:
+            max_reached_progress = door2_progress
+
+    # 6. เช็คแพ้/ชนะ
+        if door2_progress >= 100:
+            game_state = "jumpscare"
+            jumpscare_timer = 90
+
+        elif door2_progress <= 0:
+            game_state = "main"
+            door2_progress = 20
+            max_reached_progress = window_progress
+            click_power = 1.5
+            last_ghost_time = current_time   
+            ghost_cctv_pos = random.choice(["CAM 4", "CAM 5","CAM 1"])  
+            reset()
+
     elif game_state == "computer":
         # CCTV Panning
         cam_offset_x = max(SCREEN_W - IMAGE_W, min(0, cam_offset_x))
@@ -619,7 +620,7 @@ while running:
             window_progress = 50
             charge_level = 50
             ghost_cctv_pos = "CAM 5"
-            player_x, player_y = 400, 450
+            player_x, player_y = 400, 400
             reset()
 
     # 3. Rendering
@@ -642,6 +643,9 @@ while running:
         elif near_door:
             txt = font_small.render("Press [E] to Hold Door", True, (255,255,0))
             screen.blit(txt, (player_x - 50, player_y - 40))
+        elif near_door2:
+            txt = font_small.render("Press [E] to Hold Door", True, (255,255,0))
+            screen.blit(txt, (player_x - 50, player_y - 40))
         elif near_computer:
             txt = font_small.render("Press [E] to Use Computer", True, (255, 255, 0))
             screen.blit(txt, (player_x - 50, player_y - 40))
@@ -651,11 +655,36 @@ while running:
             screen.blit(txt, (10, 10))
 
     elif game_state == "window":
-        # Window Images
-        if window_progress < 40: img = windowg0
-        elif window_progress < 60: img = windowg30 
-        elif window_progress < 80: img = windowg70
-        else: img = windowg99
+        # 1. เลือกว่าจะแสดงรูปไหนตาม Progress
+        if window_progress < 30:
+            current_window_img = windowg0
+        elif window_progress < 60:
+            current_window_img = windowg30
+        elif window_progress < 90:
+            current_window_img = windowg70
+        else:
+            current_window_img = windowg99
+        
+        # 2. วาดรูปลงหน้าจอ (เพิ่มบรรทัดนี้เพื่อแก้จอดำ)
+        screen.blit(current_window_img, (0, 0))
+
+        # 3. วาด Progress Bar (สีเหลือง/ส้ม)
+        pygame.draw.rect(screen, (50, 50, 50), (200, 530, 400, 25)) # พื้นหลังหลอด
+        pygame.draw.rect(screen, (255, 200, 0), (200, 530, int(window_progress * 4), 25)) # แถบเหลือง
+        
+        # 4. วาดปุ่มกด
+        pygame.draw.rect(screen, button_color, button_rect)
+        text_surf = font.render("HOLD", True, text_color)
+        text_rect = text_surf.get_rect(center=button_rect.center)
+        screen.blit(text_surf, text_rect)
+        
+        txt = font_small.render("HOLD THE BUTTON TO CLOSE!", True, (255, 255, 255))
+        screen.blit(txt, (250, 500))
+    
+    elif game_state == "door2":
+        # door images
+        if door2_progress < 70: img = door2g
+        else: img = door2
 
         shake_x, shake_y = 0, 0
 
@@ -667,15 +696,15 @@ while running:
         screen.blit(img, (shake_x, shake_y))
         # UI Bar
         pygame.draw.rect(screen, (50, 50, 50), (200, 530, 400, 25))
-        pygame.draw.rect(screen, (200, 0, 0), (200, 530, int(window_progress * 4), 25))
+        pygame.draw.rect(screen, (200, 0, 0), (200, 530, int(door2_progress * 4), 25))
         txt = font_small.render("CLICK RAPIDLY TO HOLD THE WINDOW!", True, (255, 255, 255))
         screen.blit(txt, (230, 500))
     
     elif game_state == "door":
         if charge_level <= 70:
-            img = doorg
+            img = door1g
         else:
-            img = door
+            img = door1
 
         shake_x, shake_y = 0, 0
 
@@ -740,14 +769,14 @@ while running:
         screen.blit(font_small.render(f"LIVE: {current_cam}", True, (255, 0, 0)), (20, 20))
         screen.blit(font_small.render("Press [Q] to Exit", True, (255, 255, 255)), (20, SCREEN_H - 40))
 
-    elif game_state == "window_idle":   
-        screen.blit(windowg0, (0, 0))
+    elif game_state == "door2_idle":   
+        screen.blit(door2, (0, 0))
 
         txt = font_small.render("Nothing here... (Q to exit)", True, (255,255,255))
         screen.blit(txt, (300, 500))
 
     elif game_state == "door_idle":
-        screen.blit(door, (0, 0))
+        screen.blit(door1, (0, 0))
 
         txt = font_small.render("Nothing here... (Q to exit)", True, (255,255,255))
         screen.blit(txt, (300, 500))
@@ -757,6 +786,5 @@ while running:
         screen.blit(ghost_jump, (0, 0))
 
     pygame.display.flip()
-    clock.tick(60)
 
 pygame.quit()
