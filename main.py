@@ -21,9 +21,8 @@ CIRCLE_RADIUS = 70
 HOLD_TIME_GOAL = 10  # 10 วินาที
 pull_force_x = 0
 pull_force_y = 0
-charge_level = 50    # เริ่มที่ครึ่งหลอด
 last_pull_time = 0
-map_img = pygame.image.load("images/cam_roadmap-removebg-preview.png").convert_alpha()
+map_img = pygame.image.load("images/CamMap-removebg-preview.png").convert_alpha()
 map_img = pygame.transform.scale(map_img, (500, 300))
 noise_img = pygame.image.load("images/noise-bg.jpg").convert_alpha()
 noise_img = pygame.transform.scale(noise_img, (800,600))
@@ -70,9 +69,12 @@ current_cam = "CAM 5"
 cam_offset_x = 0
 static_timer = 0
 ghost_cctv_active = False
-ghost_cctv_pos = "CAM 0" # ผีในกล้องเริ่มที่ CAM 5
+ghost_cctv_pos = None # ผีในกล้องเริ่มที่ CAM 5
+ghost_spawn_delay = 5000  # 5 วิ
+game_start_time = pygame.time.get_ticks()
+
 ghost_nodes = {
-    "CAM 0": ["CAM 5"],
+    None: ["CAM 5"],
     "CAM 1": ["CAM 2", "CAM 3"],
     "CAM 2": ["CAM 1", "CAM 4"],
     "CAM 3": ["CAM 1", "CAM 4", "CAM 5"],
@@ -106,14 +108,17 @@ class CamButton:
         text_rect = txt.get_rect(center=self.rect.center)
         screen.blit(txt, text_rect)
 
-map_x, map_y = 380,320
+map_x, map_y = 320,320
 cctv_buttons = [
-    # อิงตามรูปแรก: CAM 1 อยู่บนซ้าย, CAM 2 อยู่หน้าต่าง, CAM 5 อยู่บนถนน
-    CamButton("CAM 1", map_x + 130,  map_y + 80),   # มุมซ้ายบน (YOU)
-    CamButton("CAM 2", map_x + 220, map_y + 90),   # ตรงหน้าต่าง (window)
-    CamButton("CAM 3", map_x + 130,  map_y + 180),  # ประตู D1
-    CamButton("CAM 4", map_x + 365, map_y + 180),  # ประตู D2
-    CamButton("CAM 5", map_x + 265, map_y + 240),  # บนถนน (ROAD)
+    CamButton("CAM 1", map_x + 120,  map_y + 60),  
+    CamButton("CAM 2", map_x + 130, map_y + 110),  
+    CamButton("CAM 3", map_x + 355,  map_y + 90),  
+    CamButton("CAM 4", map_x + 405, map_y + 40),  
+    CamButton("CAM 5", map_x + 180, map_y + 170),  
+    CamButton("CAM 6", map_x + 180, map_y + 250),
+    CamButton("CAM 7", map_x + 300, map_y + 190),
+    CamButton("CAM 8", map_x + 340,  map_y + 130),
+    CamButton("CAM 9", map_x + 405, map_y + 150),
 ]
 # --- Load Assets ---
 try:
@@ -297,7 +302,12 @@ while running:
             # ถ้ามีผี active อยู่แล้ว → ไม่ต้อง spawn ซ้ำ
             if ghost_active:
                 continue
-
+            
+            if ghost_cctv_pos is None:
+                if current_time - game_start_time > ghost_spawn_delay:
+                    ghost_cctv_pos = "CAM 5"
+                    static_timer = 20
+                continue
             move = False
             # =========================
             # 🚪 CAM 3 → DOOR LOGIC
@@ -600,7 +610,7 @@ while running:
         elif door2_progress <= 0:
             game_state = "main"
             door2_progress = 20
-            max_reached_progress = window_progress
+            max_reached_progress = door2_progress
             click_power = 1.5
             last_ghost_time = current_time   
             ghost_cctv_pos = random.choice(["CAM 4", "CAM 5","CAM 1"])  
@@ -614,6 +624,8 @@ while running:
         
 
     elif game_state == "jumpscare":
+        if jumpscare_timer == 90:
+            jumpscare.play()
         jumpscare_timer -= 1
         if jumpscare_timer <= 0:
             game_state = "main"
@@ -749,7 +761,7 @@ while running:
         screen.blit(noise_img, (0, offset_y))
         
         if static_timer > 0: 
-            for _ in range(400): 
+            for _ in range(200): 
                 nx, ny = random.randint(0, SCREEN_W), random.randint(0, SCREEN_H) 
                 nc = random.randint(150, 255) 
                 pygame.draw.rect(screen, (nc, nc, nc), (nx, ny, 3, 3)) 
@@ -782,7 +794,6 @@ while running:
         screen.blit(txt, (300, 500))
 
     elif game_state == "jumpscare":
-        jumpscare.play()
         screen.blit(ghost_jump, (0, 0))
 
     pygame.display.flip()
