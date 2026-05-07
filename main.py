@@ -45,11 +45,16 @@ jumpscare = pygame.mixer.Sound("sounds/raaaaahhh.mp3")
 # --- CCTV Setup ---
 # 1. โหลดรูปกล้อง
 cam_setup = {
-    "CAM 1": {"empty": "images/up-left-conor.jpg", "ghost": "images/up-left-conor_G.jpg"},
-    "CAM 2": {"empty": "images/windowcam.jpg",        "ghost": "images/windowcam_GN.jpg"},
-    "CAM 3": {"empty": "images/d1cam.jpg",         "ghost": "images/d1cam_G.jpg"},
-    "CAM 4": {"empty": "images/d2cam.jpg",         "ghost": "images/d2cam_G.jpg"},
-    "CAM 5": {"empty": "images/roadcam.jpg",       "ghost": "images/roadcam_G.jpg"}
+    "CAM 1": {"empty": "images/cam1.jpg",           "ghost": "images/cam1ghost.jpg"},
+    "CAM 2": {"empty": "images/cam2.jpg",        "ghost": "images/cam2ghostfar.jpg", "ghost2": "images/cam2ghostnear.jpg"},
+    "CAM 3": {"empty": "images/cam3.jpg",         "ghost": "images/cam3ghost.jpg"},
+    "CAM 4": {"empty": "images/cam4.jpg",         "ghost": "images/cam4ghost.jpg"},
+    "CAM 5": {"empty": "images/cam5.jpg",       "ghost": "images/cam5ghost.jpg"},
+    "CAM 6": {"empty": "images/cam6.jpg",       "ghost": "images/cam6ghostfar.jpg", "ghost2": "images/cam6ghostnear.jpg"},
+    "CAM 7": {"empty": "images/cam7.jpg",       "ghost": "images/cam7ghost.jpg"},
+    "CAM 8": {"empty": "images/cam8.jpg",       "ghost": "images/cam8ghost.jpg"},
+    "CAM 9": {"empty": "images/cam9.jpg",       "ghost": "images/cam9ghost.jpg"},
+    
 }
 
 cameras = {}
@@ -65,21 +70,29 @@ for cam_name, states in cam_setup.items():
             cameras[cam_name][state_name] = dummy
 
 # 2. CCTV Variables
-current_cam = "CAM 5"
+current_cam = "CAM 1"
 cam_offset_x = 0
 static_timer = 0
 ghost_cctv_active = False
-ghost_cctv_pos = None # ผีในกล้องเริ่มที่ CAM 5
+ghost_cctv_pos = None
+ghost_cctv_state = None
+ghost_from_pos = None
 ghost_spawn_delay = 5000  # 5 วิ
 game_start_time = pygame.time.get_ticks()
 
 ghost_nodes = {
-    None: ["CAM 5"],
-    "CAM 1": ["CAM 2", "CAM 3"],
-    "CAM 2": ["CAM 1", "CAM 4"],
-    "CAM 3": ["CAM 1", "CAM 4", "CAM 5"],
-    "CAM 4": ["CAM 2", "CAM 3", "CAM 5"],
-    "CAM 5": ["CAM 3", "CAM 4"]
+    None: [(("CAM 1", "far"), 1.0)],
+    ("CAM 1", "far"): [(("CAM 2", "near"), 0.6), (("CAM 2", "far"), 0.1), (("CAM 4", "far"), 0.3)],
+    ("CAM 2", "far"): [(("CAM 3", "far"), 0.7),(("CAM 2", "near"), 0.2), (("CAM 5", "far"), 0.1)],
+    ("CAM 2", "near"): [(("CAM 2", "far"), 0.2), (("CAM 5", "far"), 0.8)],
+    ("CAM 3", "far"): [(("CAM 2", "far"), 0.1), (("CAM 7", "far"), 0.1), (("CAM 8", "far"), 0.8)],
+    ("CAM 4", "far"): [(("CAM 1", "far"), 0.4), (("CAM 2", "far"), 0.1), (("CAM 3", "far"), 0.5)],
+    ("CAM 5", "far"): [(("CAM 6", "far"), 0.7), (("CAM 7", "far"), 0.2), (("CAM 8", "far"), 0.1)],
+    ("CAM 6", "far"): [(("CAM 6", "near"), 0.6), (("CAM 7", "far"), 0.3), (("CAM 8", "far"), 0.1)],
+    ("CAM 6", "near"): [(("CAM 6", "near"), 1.0)],
+    ("CAM 7", "far"): [(("CAM 6", "far"), 0.45), (("CAM 8", "far"), 0.45), (("CAM 9", "far"), 0.1)],
+    ("CAM 8", "far"): [(("CAM 7", "far"), 0.15), (("CAM 3", "far"), 0.05), (("CAM 9", "far"), 0.8)],
+    ("CAM 9", "far"): [(("CAM 9", "far"), 1.0)],
 }
 
 # 3. แผนที่ปุ่ม CCTV
@@ -146,9 +159,10 @@ def get_tile(col, row):
     return pygame.transform.scale(image, (DISPLAY_TILE, DISPLAY_TILE))
 
 def reset():
-    global ghost_active,ghost_cctv_active,breathing_playing,breathing_scream_playing,chasing_playing
+    global ghost_active,ghost_cctv_active,breathing_playing,breathing_scream_playing,chasing_playing,ghost_from_pos
     ghost_active = False
     ghost_cctv_active = True
+    ghost_from_pos = None
     breathing_playing = False
     breathing_scream_playing = False
     chasing_playing = False
@@ -157,6 +171,53 @@ def reset():
     breathing.stop()
     breathing_scream.stop()
     hit_sound.stop()
+
+
+def weighted_choice(choices):
+    global ghost_from_pos
+    # Filter choices ที่ next_pos != ghost_from_pos เพื่อไม่ให้กลับไปตำแหน่งเดิม
+    if ghost_from_pos is not None:
+        choices = [(item, weight) for item, weight in choices if item[0] != ghost_from_pos]
+    if not choices:
+        # ถ้าไม่มีทางเลือกอื่น ให้ใช้ choices เดิม (เพื่อป้องกัน stuck)
+        choices = [(item, weight) for item, weight in ghost_nodes.get((ghost_cctv_pos, ghost_cctv_state), [])]
+        if ghost_from_pos is not None:
+            choices = [(item, weight) for item, weight in choices if item[0] != ghost_from_pos]
+        if not choices:
+            # ถ้ายังไม่มี ให้สุ่มอะไรก็ได้
+            choices = [(item, weight) for item, weight in ghost_nodes.get((ghost_cctv_pos, ghost_cctv_state), [])]
+    
+    total = sum(weight for _, weight in choices)
+    if total == 0:
+        return random.choice(choices)[0] if choices else None
+    r = random.random() * total
+    upto = 0
+    for item, weight in choices:
+        if upto + weight >= r:
+            return item
+        upto += weight
+    return choices[-1][0]
+
+def draw_window_warning(progress):
+    warning_text = None
+    warning_color = None
+    if 60 <= progress <= 80:
+        warning_text = "WARNING"
+        warning_color = (255, 255, 0)
+    elif 81 <= progress < 100:
+        warning_text = "DANGER"
+        warning_color = (255, 0, 0)
+    elif progress >= 100:
+        warning_text = "ATTACK"
+        warning_color = (255, 0, 0)
+
+    if warning_text:
+        pygame.draw.rect(screen, (0, 0, 0), (620, 10, 170, 60))
+        pygame.draw.rect(screen, warning_color, (632, 22, 36, 36))
+        warn_surf = font_small.render(warning_text, True, warning_color)
+        screen.blit(warn_surf, (675, 18))
+        warn_pct = font_small.render(f"{int(progress)}%", True, warning_color)
+        screen.blit(warn_pct, (675, 42))
 
 map_data = [ #0=empty 1=floor 
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -271,7 +332,7 @@ for r, row in enumerate(decor_map):
 
 # Custom Events
 GHOST_CCTV_MOVE = pygame.USEREVENT + 1
-pygame.time.set_timer(GHOST_CCTV_MOVE, 5000)
+pygame.time.set_timer(GHOST_CCTV_MOVE, 10000)
 
 # --- Main Loop ---
 running = True
@@ -288,6 +349,12 @@ while running:
     # (ยกเว้นตอน Jumpscare เพื่อไม่ให้ค่ามันรันต่อตอนตาย)
     if game_state != "jumpscare":
         window_progress += window_speed * 10 * dt # ปรับตัวคูณเพื่อความเร็วที่เหมาะสม
+        
+        # ตรวจสอบ jumpscare ทันทีที่หลอด >= 100 ไม่ว่าจะอยู่ state ไหน
+        if window_progress >= 100:
+            window_progress = 100
+            game_state = "jumpscare"
+            jumpscare_timer = 90
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -305,50 +372,51 @@ while running:
             
             if ghost_cctv_pos is None:
                 if current_time - game_start_time > ghost_spawn_delay:
-                    ghost_cctv_pos = "CAM 5"
+                    ghost_cctv_pos = "CAM 1"
+                    ghost_cctv_state = "far"
+                    ghost_from_pos = None
                     static_timer = 20
                 continue
+            old_pos = ghost_cctv_pos
             move = False
             # =========================
-            # 🚪 CAM 3 → DOOR LOGIC
+            # 🚪 CAM 6 → FONT DOOR LOGIC
             # =========================
-            if ghost_cctv_pos == "CAM 3":
-                if random.random() < 0.3 and current_time - last_door_attack_time > door_attack_cooldown:
+            if ghost_cctv_pos == "CAM 6" and ghost_cctv_state == "near":
+                if current_time - last_door_attack_time > door_attack_cooldown:
                     ghost_active = True
                     ghost_target = "door"
                     ghost_spawn_time = current_time
                     last_door_attack_time = current_time
                     door_opening.play()
-                    print("Ghost attack from CAM 3 -> DOOR")
-                else:
-                    ghost_cctv_pos = random.choice(["CAM 1", "CAM 4", "CAM 5"])
-                    move = True
+                    print("Ghost attack from CAM 6 near -> DOOR")
+
+            elif ghost_cctv_pos == "CAM 6" and ghost_cctv_state == "far":
+                ghost_cctv_pos, ghost_cctv_state = weighted_choice(ghost_nodes[(ghost_cctv_pos, ghost_cctv_state)])
+                move = True
 
             # =========================
-            # 🚪 CAM 4 → DOOR LOGIC
+            # 🚪 CAM 9 → BACK DOOR LOGIC
             # =========================
-            
-            elif ghost_cctv_pos == "CAM 4":
-                if random.random() < 0.3 :
+            elif ghost_cctv_pos == "CAM 9":
+                if current_time - last_door_attack_time > door_attack_cooldown:
                     ghost_active = True
                     ghost_target = "door2"
                     ghost_spawn_time = current_time
                     last_door_attack_time = current_time
                     door_knocking.stop()   # 💥 หยุดเสียงเคาะทันที
                     door_opening.play()
-                    print("Ghost attack from CAM 4 -> DOOR")
-                else:
-                    ghost_cctv_pos = random.choice(["CAM 2","CAM 5", "CAM 3"])
-                    move = True
+                    print("Ghost attack from CAM 9 -> DOOR2")
 
             # =========================
             # 👻 DEFAULT MOVE
             # =========================
             else:
-                ghost_cctv_pos = random.choice(ghost_nodes[ghost_cctv_pos])
+                ghost_cctv_pos, ghost_cctv_state = weighted_choice(ghost_nodes[(ghost_cctv_pos, ghost_cctv_state)])
                 move = True
 
             if move:
+                ghost_from_pos = old_pos
                 static_timer = 15
         
         if event.type == pygame.KEYDOWN:
@@ -409,12 +477,6 @@ while running:
                     camera_sound.play()
                     footstep.stop()
     # 2. Update Logic
-    
-    if ghost_cctv_pos == "CAM 4" and not ghost_active and game_state != "door2":
-                if current_time - last_knock_time > 2000:  # ทุก 2 วิ
-                    door_knocking.play()
-                    last_knock_time = current_time
-
     # --- GHOST TIMER CHECK ---
     if ghost_active and game_state in ["main", "door2_idle", "door_idle","computer"]:
         if ghost_target == "door":
@@ -483,17 +545,20 @@ while running:
 
         # เช็คว่าเมาส์ทับปุ่ม และ คลิกซ้ายค้างอยู่หรือไม่
         if button_rect.collidepoint(mouse_pos) and mouse_click[0]:
-            # Logic: เพิ่มค่า
+            # Logic: ลดค่า progress เมื่อกดปุ่ม
             window_progress -= 1.5
             # Logic: เปลี่ยนสีปุ่มเมื่อกด
             button_color = (100, 0, 0)
         else:
             # Logic: คืนสีเดิมเมื่อไม่ได้กด
             button_color = (200, 0, 0)
-        if window_progress < 0: window_progress = 0
 
-    # 6. เช็คแพ้/ชนะ
+        if window_progress < 0:
+            window_progress = 0
+
+        # 6. เช็คแพ้/ชนะ
         if window_progress >= 100:
+            window_progress = 100
             game_state = "jumpscare"
             jumpscare_timer = 90
     
@@ -541,7 +606,8 @@ while running:
         if charge_level >= 100:
             game_state = "main"
             last_ghost_time = current_time  
-            ghost_cctv_pos = "CAM 5"
+            ghost_cctv_pos = "CAM 1"
+            ghost_cctv_state = "far"
             last_ghost_time = current_time
             reset()
 
@@ -608,14 +674,14 @@ while running:
             jumpscare_timer = 90
 
         elif door2_progress <= 0:
-            game_state = "main"
-            door2_progress = 20
-            max_reached_progress = door2_progress
-            click_power = 1.5
-            last_ghost_time = current_time   
-            ghost_cctv_pos = random.choice(["CAM 4", "CAM 5","CAM 1"])  
-            reset()
-
+                game_state = "main"
+                door2_progress = 20
+                max_reached_progress = door2_progress
+                click_power = 1.5
+                last_ghost_time = current_time   
+                ghost_cctv_pos = "CAM 1"
+                ghost_cctv_state = "far"
+                reset()
     elif game_state == "computer":
         # CCTV Panning
         cam_offset_x = max(SCREEN_W - IMAGE_W, min(0, cam_offset_x))
@@ -631,7 +697,8 @@ while running:
             game_state = "main"
             window_progress = 50
             charge_level = 50
-            ghost_cctv_pos = "CAM 5"
+            ghost_cctv_pos = "CAM 1"
+            ghost_cctv_state = "far"
             player_x, player_y = 400, 400
             reset()
 
@@ -666,6 +733,8 @@ while running:
             txt = font_small.render(f"GHOST: {ghost_target}", True, (255,0,0))
             screen.blit(txt, (10, 10))
 
+        draw_window_warning(window_progress)
+
     elif game_state == "window":
         # 1. เลือกว่าจะแสดงรูปไหนตาม Progress
         if window_progress < 30:
@@ -680,10 +749,35 @@ while running:
         # 2. วาดรูปลงหน้าจอ (เพิ่มบรรทัดนี้เพื่อแก้จอดำ)
         screen.blit(current_window_img, (0, 0))
 
-        # 3. วาด Progress Bar (สีเหลือง/ส้ม)
+        # 3. วาด Progress Bar (สีเหลือง/ส้ม/แดง)
+        bar_color = (255, 200, 0)
+        warning_text = None
+        warning_color = None
+
+        if 60 <= window_progress <= 80:
+            warning_text = "WARNING"
+            warning_color = (255, 255, 0)
+            bar_color = (255, 180, 0)
+        elif 81 <= window_progress < 100:
+            warning_text = "DANGER"
+            warning_color = (255, 0, 0)
+            bar_color = (255, 120, 0)
+        elif window_progress >= 100:
+            warning_text = "ATTACK"
+            warning_color = (255, 0, 0)
+            bar_color = (255, 0, 0)
+
         pygame.draw.rect(screen, (50, 50, 50), (200, 530, 400, 25)) # พื้นหลังหลอด
-        pygame.draw.rect(screen, (255, 200, 0), (200, 530, int(window_progress * 4), 25)) # แถบเหลือง
-        
+        pygame.draw.rect(screen, bar_color, (200, 530, int(window_progress * 4), 25))
+
+        if warning_text:
+            pygame.draw.rect(screen, (0, 0, 0), (620, 520, 170, 60))
+            pygame.draw.rect(screen, warning_color, (632, 532, 36, 36))
+            warn_surf = font_small.render(warning_text, True, warning_color)
+            screen.blit(warn_surf, (675, 528))
+            warn_pct = font_small.render(f"{int(window_progress)}%", True, warning_color)
+            screen.blit(warn_pct, (675, 552))
+
         # 4. วาดปุ่มกด
         pygame.draw.rect(screen, button_color, button_rect)
         text_surf = font.render("HOLD", True, text_color)
@@ -742,9 +836,14 @@ while running:
     elif game_state == "computer":
         # 1. วาดรูปกล้อง
         if ghost_active:
-            state = "empty" 
+            state = "empty"
+        elif current_cam == ghost_cctv_pos:
+            if ghost_cctv_state == "near" and "ghost2" in cameras[current_cam]:
+                state = "ghost2"
+            else:
+                state = "ghost"
         else:
-            state = "ghost" if current_cam == ghost_cctv_pos else "empty"
+            state = "empty"
         screen.blit(cameras[current_cam][state], (cam_offset_x, 0))
 
         # 2. วาด Noise
@@ -781,11 +880,15 @@ while running:
         screen.blit(font_small.render(f"LIVE: {current_cam}", True, (255, 0, 0)), (20, 20))
         screen.blit(font_small.render("Press [Q] to Exit", True, (255, 255, 255)), (20, SCREEN_H - 40))
 
+        draw_window_warning(window_progress)
+
     elif game_state == "door2_idle":   
         screen.blit(door2, (0, 0))
 
         txt = font_small.render("Nothing here... (Q to exit)", True, (255,255,255))
         screen.blit(txt, (300, 500))
+
+        draw_window_warning(window_progress)
 
     elif game_state == "door_idle":
         screen.blit(door1, (0, 0))
@@ -793,9 +896,14 @@ while running:
         txt = font_small.render("Nothing here... (Q to exit)", True, (255,255,255))
         screen.blit(txt, (300, 500))
 
+        draw_window_warning(window_progress)
+
     elif game_state == "jumpscare":
         screen.blit(ghost_jump, (0, 0))
 
+    # วาด warning ทุกหน้า
+    draw_window_warning(window_progress)
+    
     pygame.display.flip()
 
 pygame.quit()
