@@ -28,6 +28,55 @@ noise_img = pygame.image.load("images/noise-bg.jpg").convert_alpha()
 noise_img = pygame.transform.scale(noise_img, (800,600))
 noise_img.set_alpha(40)
 
+dots_grid = [[None for _ in range(6)] for _ in range(6)]
+completed_paths = {}
+drawing_path = []
+current_color = None
+is_finishing_stroke = False
+# --- CONFIGURATION ---
+DOTS_GRID_SIZE = 6
+DOTS_CELL_SIZE = 65
+GRID_X_OFFSET = (SCREEN_W - DOTS_GRID_SIZE * DOTS_CELL_SIZE) // 2 + 50
+GRID_Y_OFFSET = 130
+
+# สีสำหรับวาด (RGB)
+C_RED = (255, 50, 50)
+C_GREEN = (50, 255, 50)
+C_BLUE = (50, 80, 255)
+C_YELLOW = (255, 255, 50)
+C_ORANGE = (255, 150, 50)
+C_PURPLE = (200, 50, 255)
+
+LEVELS = [
+    # Pattern 1: ด่านเน้นลากยาว (สมดุล)
+    [
+        (0,0, 4,2, C_RED),    
+        (0,5, 2,3, C_GREEN),   
+        (5,0, 3,2, C_BLUE),    
+        (4,0, 1,1, C_YELLOW), 
+        (1,4, 5,5, C_ORANGE),  
+        (2,4, 5,4, C_PURPLE)   
+    ],
+ 
+    [
+        (0,0, 5,5, C_RED),    
+        (1,0, 5,0, C_GREEN),   
+        (1,1, 1,4, C_BLUE),    
+        (2,1, 4,1, C_YELLOW),  
+        (5,1, 5,4, C_ORANGE),  
+        (2,4, 4,4, C_PURPLE)   
+    ],
+
+    [
+        (4,1, 4,5, C_RED),     
+        (2,0, 2,5, C_GREEN),   
+        (5,3, 5,5, C_BLUE),    
+        (3,0, 4,4, C_YELLOW),  
+        (1,1, 2,4, C_ORANGE), 
+        (1,2, 1,4, C_PURPLE)  
+    ],
+]
+
 # --- Hour System ---
 current_hour = 1
 max_unlocked_hour = 1
@@ -36,6 +85,12 @@ time_speed = 10  # เพิ่ม 10 นาทีต่อ 1 นาทีจร
 hour_duration = 60  # นาทีต่อ hour
 game_won = False
 hour_intro_shown = False
+
+# --- Blackout System ---
+is_blackout = False
+blackout_timer = 0          # เวลาที่ไฟดับเหลืออยู่ (วินาที) — ใช้แค่ tracking ไม่บังคับหมดเวลา
+next_blackout_time = 0      # timestamp (ms) ที่ไฟดับครั้งต่อไป
+blackout_surface = None     # Surface สำหรับทำห้องมืด (สร้างครั้งเดียว)
 
 # Hour Configurations
 hour_configs = {
@@ -110,6 +165,11 @@ breathing_scream = pygame.mixer.Sound("sounds/heavy-breathing-scream.mp3")
 footstep = pygame.mixer.Sound("sounds/valorant-footstep.mp3")
 ambient = pygame.mixer.Sound("sounds/among-us-reactor-ambient.mp3")
 jumpscare = pygame.mixer.Sound("sounds/raaaaahhh.mp3")
+try:
+    blackout_sound = pygame.mixer.Sound("sounds/blackout.mp3")  # ← ใส่ไฟล์เสียงของคุณที่นี่
+except:
+    blackout_sound = None  # ถ้ายังไม่มีไฟล์เสียง จะข้ามไป
+blackout_sound_playing = False
 # --- CCTV Setup ---
 # 1. โหลดรูปกล้อง
 cam_setup = {
@@ -136,6 +196,22 @@ for cam_name, states in cam_setup.items():
             dummy = pygame.Surface((IMAGE_W, IMAGE_H))
             dummy.fill((50, 50, 50))
             cameras[cam_name][state_name] = dummy
+
+# No Signal surface สำหรับตอนไฟดับ (แบบเดิม — fallback)
+no_signal_surf = pygame.Surface((IMAGE_W, IMAGE_H))
+no_signal_surf.fill((10, 10, 10))
+ns_font = pygame.font.SysFont("Arial", 60, bold=True)
+ns_text = ns_font.render("NO SIGNAL", True, (180, 180, 180))
+no_signal_surf.blit(ns_text, (IMAGE_W//2 - ns_text.get_width()//2, IMAGE_H//2 - ns_text.get_height()//2))
+ns_sub = pygame.font.SysFont("Arial", 28).render("Power failure — restore electricity", True, (120, 120, 120))
+no_signal_surf.blit(ns_sub, (IMAGE_W//2 - ns_sub.get_width()//2, IMAGE_H//2 + 50))
+
+# ภาพที่แสดงในกล้องทุกตัวตอนไฟดับ — ใส่ภาพของคุณที่ images/no_signal_cam.jpg
+try:
+    _ns_cam_raw = pygame.image.load("images/no_signal_cam.jpg").convert()
+    no_signal_cam_surf = pygame.transform.scale(_ns_cam_raw, (IMAGE_W, IMAGE_H))
+except:
+    no_signal_cam_surf = no_signal_surf  # fallback ใช้ surface เดิม
 
 # 2. CCTV Variables
 current_cam = "CAM 1"
@@ -265,6 +341,46 @@ def reset_game():
     ghost_cooldown = config["ghost_cooldown"]
     door_attack_cooldown = config["door_attack_cooldown"]
 
+    # Reset blackout state
+    global is_blackout, next_blackout_time, blackout_timer
+    is_blackout = False
+    blackout_timer = 0
+    if current_hour >= 2:
+        _schedule_next_blackout()
+
+
+def _get_blackout_interval():
+    """คืนค่าช่วงเวลาระหว่างไฟดับ (ms) ตาม hour — ยิ่ง hour สูง ยิ่งถี่"""
+    # hour2: ~60-90s, hour3: ~45-70s, hour4: ~30-55s, hour5: ~20-40s
+    intervals = {2: (60000, 90000), 3: (45000, 70000), 4: (30000, 55000), 5: (20000, 40000)}
+    lo, hi = intervals.get(current_hour, (60000, 90000))
+    return random.randint(lo, hi)
+
+
+def _schedule_next_blackout():
+    global next_blackout_time
+    next_blackout_time = pygame.time.get_ticks() + _get_blackout_interval()
+
+
+def trigger_blackout():
+    global is_blackout, blackout_timer, blackout_sound_playing
+    is_blackout = True
+    blackout_timer = pygame.time.get_ticks()
+    # เล่นเสียง blackout (loop) ถ้ามีไฟล์เสียง
+    if blackout_sound is not None and not blackout_sound_playing:
+        blackout_sound.play(-1)
+        blackout_sound_playing = True
+
+
+def end_blackout():
+    global is_blackout, blackout_sound_playing
+    is_blackout = False
+    _schedule_next_blackout()
+    # หยุดเสียง blackout
+    if blackout_sound is not None:
+        blackout_sound.stop()
+    blackout_sound_playing = False
+
 
 def weighted_choice(choices):
     global ghost_from_pos
@@ -324,6 +440,28 @@ def get_time_string():
         return f"{total_hours:02d}:{display_minutes:02d} AM"
 
 
+def load_level():
+    global dots_grid, completed_paths, drawing_path, current_color
+    dots_grid = [[None for _ in range(6)] for _ in range(6)]
+    completed_paths = {}
+    drawing_path = []
+    current_color = None
+    
+    # สุ่มเลือก 1 จาก 3 Pattern
+    level_data = random.choice(LEVELS)
+    for x1, y1, x2, y2, color in level_data:
+        dots_grid[y1][x1] = color
+        dots_grid[y2][x2] = color
+
+def get_grid_pos(mouse_pos):
+    gx = (mouse_pos[0] - GRID_X_OFFSET) // DOTS_CELL_SIZE
+    gy = (mouse_pos[1] - GRID_Y_OFFSET) // DOTS_CELL_SIZE
+    if 0 <= gx < 6 and 0 <= gy < 6:
+        return gx, gy
+    return None
+
+
+
 # --- Game State Constants ---
 STATE_MAIN = "main"
 STATE_WINDOW = "window"
@@ -335,6 +473,7 @@ STATE_DOOR2_IDLE = "door2_idle"
 STATE_JUMPSCARE = "jumpscare"
 STATE_MENU = "menu"
 STATE_GAME_OVER = "game_over"
+STATE_ELECTRIC_BOX = "electric_box"
 
 input_state = {"space": False}
 current_menu_page = "main"  # "main" หรือ "hour_select"
@@ -450,7 +589,13 @@ def process_keydown(event, current_time):
             open_camera_sound.play()
             ambient.play(-1)
 
-    if event.key == pygame.K_q and game_state in [STATE_DOOR2_IDLE, STATE_DOOR_IDLE, STATE_COMPUTER, STATE_WINDOW]:
+        elif near_electric_box and current_hour >= 2:
+            set_state(STATE_ELECTRIC_BOX)
+            if is_blackout:
+                load_level()
+            footstep.stop()
+
+    if event.key == pygame.K_q and game_state in [STATE_DOOR2_IDLE, STATE_DOOR_IDLE, STATE_COMPUTER, STATE_WINDOW, STATE_ELECTRIC_BOX]:
         set_state(STATE_MAIN)
         ambient.stop()
 
@@ -543,7 +688,7 @@ def update_ghost_attack_timeout(current_time):
 
 
 def update_main(dt):
-    global player_x, player_y, footstep_playing, near_window, near_door, near_door2, near_computer
+    global player_x, player_y, footstep_playing, near_window, near_door, near_door2, near_computer, near_electric_box
 
     moving = False
     keys = pygame.key.get_pressed()
@@ -584,6 +729,7 @@ def update_main(dt):
     near_door = any(p_rect.inflate(20, 20).colliderect(i) for i in door_rects)
     near_door2 = any(p_rect.inflate(20, 20).colliderect(i) for i in door2_rects)
     near_computer = any(p_rect.inflate(20, 20).colliderect(i) for i in computer_rects)
+    near_electric_box = any(p_rect.inflate(20, 20).colliderect(i) for i in electric_box_rects)
 
 
 def update_window_state():
@@ -706,6 +852,70 @@ def update_computer_state():
         cam_offset_x -= 7
 
 
+def update_electric_box_state():
+    global drawing_path, current_color, completed_paths, is_finishing_stroke
+
+    # ถ้าไฟไม่ดับ ไม่ต้องทำอะไรในหน้านี้
+    if not is_blackout:
+        return
+
+    mouse_pos = pygame.mouse.get_pos()
+    mouse_pressed = pygame.mouse.get_pressed()[0]
+    grid_pos = get_grid_pos(mouse_pos)
+
+    if mouse_pressed:
+        # ถ้าอยู่ในสถานะ "เพิ่งลากเสร็จและยังไม่ปล่อยเมาส์" ให้หยุดทำงานก่อน
+        if is_finishing_stroke:
+            return
+
+        if grid_pos:
+            gx, gy = grid_pos
+            
+            # 1. เริ่มลากเส้นใหม่
+            if not drawing_path:
+                if dots_grid[gy][gx] is not None:
+                    current_color = dots_grid[gy][gx]
+                    # ลบเส้นเก่าของสีนี้ออกก่อนลากใหม่
+                    if current_color in completed_paths:
+                        del completed_paths[current_color]
+                    drawing_path = [(gx, gy)]
+            
+            # 2. ระหว่างลาก
+            elif grid_pos != drawing_path[-1]:
+                last_x, last_y = drawing_path[-1]
+                
+                # เช็คระยะ: ต้องห่างกันแค่ 1 ช่อง (ไม่ทะแยง)
+                if abs(gx - last_x) + abs(gy - last_y) == 1:
+                    
+                    # เช็คว่าไปทับเส้นสีอื่นไหม
+                    is_obstructed = any(grid_pos in path for path in completed_paths.values())
+                    
+                    if not is_obstructed:
+                        # กรณีเจอจุดสี
+                        if dots_grid[gy][gx] is not None:
+                            # ถ้าเป็นสีของตัวเอง และไม่ใช่จุดเริ่มต้นเดิม
+                            if dots_grid[gy][gx] == current_color and grid_pos != drawing_path[0]:
+                                drawing_path.append(grid_pos)
+                                completed_paths[current_color] = list(drawing_path)
+                                # --- ล็อคทันที! ---
+                                drawing_path = []
+                                current_color = None
+                                is_finishing_stroke = True
+                                # ถ้าครบ 6 เส้น ไฟกลับมา!
+                                if len(completed_paths) == 6:
+                                    end_blackout()
+                                    set_state(STATE_MAIN)
+                        else:
+                            # ช่องว่าง ลากต่อได้ แต่ห้ามทับเส้นตัวเองที่กำลังลากอยู่
+                            if grid_pos not in drawing_path:
+                                drawing_path.append(grid_pos)
+    else:
+        # เมื่อปล่อยเมาส์: ปลดล็อคสถานะ และล้างเส้นที่ลากค้างไว้ (ถ้าลากไม่สำเร็จ)
+        is_finishing_stroke = False
+        drawing_path = []
+        current_color = None
+
+
 def update_jumpscare_state():
     global jumpscare_timer, game_state, window_progress, charge_level, ghost_cctv_pos, ghost_cctv_state, player_x, player_y
 
@@ -713,13 +923,14 @@ def update_jumpscare_state():
         jumpscare.play()
     jumpscare_timer -= 1
     if jumpscare_timer <= 0:
-        set_state(STATE_MAIN)
+        set_state(STATE_MENU)
         window_progress = 50
         charge_level = 50
-        ghost_cctv_pos = "CAM 1"
+        ghost_cctv_pos = "None"
         ghost_cctv_state = "far"
         player_x, player_y = 400, 400
         reset()
+        reset_game()
 
 
 def update_state(dt, current_time):
@@ -735,6 +946,10 @@ def update_state(dt, current_time):
             if current_hour < 5:
                 max_unlocked_hour = current_hour + 1
             set_state(STATE_GAME_OVER)
+        # --- Blackout trigger ---
+        if current_hour >= 2 and not is_blackout and next_blackout_time > 0:
+            if current_time >= next_blackout_time:
+                trigger_blackout()
     if game_state == STATE_MAIN:
         update_main(dt)
     elif game_state == STATE_WINDOW:
@@ -745,6 +960,8 @@ def update_state(dt, current_time):
         update_door2_state()
     elif game_state == STATE_COMPUTER:
         update_computer_state()
+    elif game_state == STATE_ELECTRIC_BOX:
+        update_electric_box_state()
     elif game_state == STATE_JUMPSCARE:
         update_jumpscare_state()
     elif game_state == STATE_MENU:
@@ -763,6 +980,27 @@ def render_main_state():
             if val in walls_img:
                 screen.blit(walls_img[val], (c * DISPLAY_TILE, r * DISPLAY_TILE))
     pygame.draw.rect(screen, (0, 200, 255), (player_x, player_y, player_size, player_size))
+
+    # --- Blackout darkness effect ---
+    if is_blackout:
+        LIGHT_RADIUS = 110  # รัศมีวงกลมที่มองเห็นรอบผู้เล่น
+        cx = player_x + player_size // 2
+        cy = player_y + player_size // 2
+
+        dark = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        dark.fill((0, 0, 0, 240))  # มืดมาก แต่ไม่ถึงดำสนิท
+
+        # เจาะวงแสงด้วยการลบ alpha วงกลมบริเวณผู้เล่น
+        for r in range(LIGHT_RADIUS, 0, -1):
+            alpha = int(240 * (r / LIGHT_RADIUS) ** 2)  # gradient มืดตามขอบ
+            pygame.draw.circle(dark, (0, 0, 0, alpha), (cx, cy), r)
+
+        screen.blit(dark, (0, 0))
+
+        # แสดงข้อความเตือน
+        bo_txt = font_small.render("BLACKOUT — Fix the electric box!", True, (255, 180, 0))
+        screen.blit(bo_txt, (SCREEN_W//2 - bo_txt.get_width()//2, 10))
+
     if near_window:
         txt = font_small.render("Press [E] to Close Window", True, (255,255,0))
         screen.blit(txt, (player_x - 50, player_y - 40))
@@ -775,6 +1013,12 @@ def render_main_state():
     elif near_computer:
         txt = font_small.render("Press [E] to Use Computer", True, (255, 255, 0))
         screen.blit(txt, (player_x - 50, player_y - 40))
+    elif near_electric_box and current_hour >= 2:
+        if is_blackout:
+            txt = font_small.render("Press [E] to Fix Power", True, (255, 200, 0))
+        else:
+            txt = font_small.render("An electric box... nothing to do here", True, (180, 180, 180))
+        screen.blit(txt, (player_x - 80, player_y - 40))
     if ghost_active:
         txt = font_small.render(f"GHOST: {ghost_target}", True, (255,0,0))
         screen.blit(txt, (10, 10))
@@ -877,6 +1121,25 @@ def render_door2_state():
 
 def render_computer_state():
     global static_timer
+    if is_blackout:
+        # ไฟดับ — แสดงภาพ no_signal_cam.jpg เดียวกันทุก CAM (ภาพใส่เองได้)
+        screen.blit(no_signal_cam_surf, (0, 0))
+        # scanline effect เล็กน้อยให้ดูสมจริง
+        scanline = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        for y in range(0, SCREEN_H, 3):
+            pygame.draw.line(scanline, (0, 0, 0, 30), (0, y), (SCREEN_W, y))
+        screen.blit(scanline, (0, 0))
+        # UI ปกติ — แผนที่ + ปุ่ม CAM ยังแสดงเหมือนเดิม
+        screen.blit(font_small.render(f"LIVE: {current_cam}", True, (200, 0, 0)), (20, 20))
+        screen.blit(font_small.render("Press [Q] to Exit", True, (255, 255, 255)), (20, SCREEN_H - 40))
+        bo_warn = font_small.render("Power is out — find the electric box!", True, (255, 180, 0))
+        screen.blit(bo_warn, (SCREEN_W//2 - bo_warn.get_width()//2, SCREEN_H//2 + 100))
+        draw_window_warning(window_progress)
+        screen.blit(map_img, (map_x, map_y))
+        for btn in cctv_buttons:
+            btn.draw(screen, btn.name == current_cam)
+        return
+
     if ghost_active:
         state = "empty"
     elif current_cam == ghost_cctv_pos:
@@ -905,7 +1168,6 @@ def render_computer_state():
     screen.blit(map_img, (map_x, map_y))
     for btn in cctv_buttons:
         btn.draw(screen, btn.name == current_cam)
-    
 
 
 def render_idle_state(image):
@@ -913,6 +1175,72 @@ def render_idle_state(image):
     txt = font_small.render("Nothing here... (Q to exit)", True, (255,255,255))
     screen.blit(txt, (300, 500))
     draw_window_warning(window_progress)
+
+
+def render_electric_box_state():
+    # ถ้าไฟไม่ดับ — แสดงกล่องปิดพร้อมข้อความ (ภาพเดี๋ยวใส่เอง)
+    if not is_blackout:
+        screen.fill((20, 20, 20))
+        if electric_box_idle_img is not None:
+            screen.blit(electric_box_idle_img, (0, 0))
+        else:
+            # Placeholder ถ้ายังไม่มีภาพ
+            screen.fill((25, 25, 30))
+            box_rect = pygame.Rect(SCREEN_W//2 - 100, SCREEN_H//2 - 120, 200, 200)
+            pygame.draw.rect(screen, (60, 60, 70), box_rect)
+            pygame.draw.rect(screen, (100, 100, 110), box_rect, 3)
+            bolt_font = pygame.font.SysFont("Arial", 80, bold=True)
+            bolt = bolt_font.render("!", True, (180, 180, 100))
+            screen.blit(bolt, (SCREEN_W//2 - bolt.get_width()//2, SCREEN_H//2 - 80))
+        idle_txt = font_small.render("An electric box... nothing to do here", True, (200, 200, 200))
+        screen.blit(idle_txt, (SCREEN_W//2 - idle_txt.get_width()//2, SCREEN_H - 100))
+        exit_txt = font_small.render("Press [Q] to Exit", True, (160, 160, 160))
+        screen.blit(exit_txt, (SCREEN_W//2 - exit_txt.get_width()//2, SCREEN_H - 60))
+        pygame.display.flip()
+        return
+
+    # ไฟดับ — แสดงมินิเกม
+    screen.fill((25, 25, 25))
+    
+    # UI Header
+    title = font_large.render("RESTORE POWER", True, (255, 215, 0))
+    screen.blit(title, (SCREEN_W//2 - title.get_width()//2, 25))
+
+    # วาดพื้นหลังตาราง
+    for r in range(DOTS_GRID_SIZE):
+        for c in range(DOTS_GRID_SIZE):
+            rect = pygame.Rect(GRID_X_OFFSET + c*DOTS_CELL_SIZE, GRID_Y_OFFSET + r*DOTS_CELL_SIZE, DOTS_CELL_SIZE, DOTS_CELL_SIZE)
+            pygame.draw.rect(screen, (50, 50, 50), rect, 1)
+
+    # วาดเส้นที่ลากเสร็จแล้ว
+    for color, path in completed_paths.items():
+        if len(path) > 1:
+            points = [(GRID_X_OFFSET + p[0]*DOTS_CELL_SIZE + DOTS_CELL_SIZE//2, 
+                       GRID_Y_OFFSET + p[1]*DOTS_CELL_SIZE + DOTS_CELL_SIZE//2) for p in path]
+            pygame.draw.lines(screen, color, False, points, 15)
+
+    # วาดเส้นที่กำลังลาก
+    if len(drawing_path) > 1:
+        points = [(GRID_X_OFFSET + p[0]*DOTS_CELL_SIZE + DOTS_CELL_SIZE//2, 
+                   GRID_Y_OFFSET + p[1]*DOTS_CELL_SIZE + DOTS_CELL_SIZE//2) for p in drawing_path]
+        pygame.draw.lines(screen, current_color, False, points, 15)
+
+    # วาดจุดสี — guard: ตรวจ dots_grid มีขนาดครบก่อนวาด
+    if len(dots_grid) == 6 and all(len(row) == 6 for row in dots_grid):
+        for r in range(6):
+            for c in range(6):
+                if dots_grid[r][c]:
+                    center = (GRID_X_OFFSET + c*DOTS_CELL_SIZE + DOTS_CELL_SIZE//2, 
+                              GRID_Y_OFFSET + r*DOTS_CELL_SIZE + DOTS_CELL_SIZE//2)
+                    pygame.draw.circle(screen, dots_grid[r][c], center, 20)
+                    pygame.draw.circle(screen, (255,255,255), center, 20, 2)
+
+    # UI Footer
+    msg = f"Completed: {len(completed_paths)}/6"
+    info = font_small.render(msg, True, (200, 200, 200))
+    screen.blit(info, (SCREEN_W//2 - info.get_width()//2, 520))
+
+    pygame.display.flip()
 
 
 def render_menu():
@@ -969,7 +1297,14 @@ def render_menu():
 
 
 def render_game_over():
+    global game_over_shown
     screen.fill((0, 0, 0))
+    
+    # Stop ambient sound on first frame
+    if not hasattr(render_game_over, 'stopped'):
+        ambient.stop()
+        render_game_over.stopped = True
+    
     if game_won:
         text = font_large.render(f"Hour {current_hour} Complete!", True, (0, 255, 0))
         if current_hour < 5:
@@ -984,7 +1319,6 @@ def render_game_over():
     screen.blit(subtext2, (SCREEN_W//2 - subtext2.get_width()//2, 300))
     subtext = font.render("Press R to Menu or Q to Quit", True, (255, 255, 255))
     screen.blit(subtext, (SCREEN_W//2 - subtext.get_width()//2, 400))
-
 
 def render_jumpscare_state():
     screen.blit(ghost_jump, (0, 0))
@@ -1001,6 +1335,8 @@ def render_state():
         render_door2_state()
     elif game_state == STATE_COMPUTER:
         render_computer_state()
+    elif game_state == STATE_ELECTRIC_BOX:
+        render_electric_box_state()
     elif game_state == STATE_DOOR2_IDLE:
         render_idle_state(door2)
     elif game_state == STATE_DOOR_IDLE:
@@ -1039,7 +1375,7 @@ decor_map = [ #0=empty 1=wall
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,3,0,1,0,0,0],
+    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,6,0,0,0,3,0,1,0,0,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
     [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1,0,0,0],
     [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
@@ -1059,7 +1395,7 @@ tiles = { 1: get_tile(24, 0) }
 
 walls_img = {
     1: get_tile(5, 0), 2: get_tile(24, 4), 3: get_tile(24, 4),
-    4: get_tile(24, 4),5: get_tile(24, 4)
+    4: get_tile(24, 4),5: get_tile(24, 4),6: get_tile(24, 4)
 }
 
 # --- Game Variables ---
@@ -1079,6 +1415,16 @@ near_window = False
 near_door = False
 near_door2 = False
 near_computer = False
+near_electric_box = False
+
+# --- Connect the Dots Variables ---
+DOTS_GRID_SIZE = 6
+DOTS_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0)]  # Red, Green, Blue, Yellow
+DOTS_CELL_SIZE = 50
+dots_grid = [[None for _ in range(6)] for _ in range(6)]  # 6x6 grid เริ่มต้น
+current_selection = None  # (start_dot, end_dot_list) for validation
+drawing_path = []  # Path being drawn
+completed_matches = []  # Completed color matches
 max_reached_progress = window_progress
 last_pull_time = 0
 pull_force_x = 0
@@ -1108,6 +1454,7 @@ window_rects = []
 door_rects = []
 door2_rects = []
 computer_rects = []
+electric_box_rects = []
 for r, row in enumerate(decor_map):
     for c, val in enumerate(row):
         rect = pygame.Rect(c * DISPLAY_TILE, r * DISPLAY_TILE, DISPLAY_TILE, DISPLAY_TILE)
@@ -1121,11 +1468,20 @@ for r, row in enumerate(decor_map):
             door_rects.append(rect)
         if val in [3]:
             door2_rects.append(rect)
+        if val in [6]:
+            electric_box_rects.append(rect)
         
 
 # Custom Events
 GHOST_CCTV_MOVE = pygame.USEREVENT + 1
 pygame.time.set_timer(GHOST_CCTV_MOVE, 7000)
+
+# โหลดภาพ electric box ปกติ (ใส่ภาพของตัวเองได้ในภายหลัง)
+try:
+    electric_box_idle_img = pygame.transform.scale(
+        pygame.image.load("images/electric_box_idle.jpg").convert(), (SCREEN_W, SCREEN_H))
+except:
+    electric_box_idle_img = None  # จะใช้ placeholder แทนใน render
 
 # --- Main Loop ---
 game_running = True
